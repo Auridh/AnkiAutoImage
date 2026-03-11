@@ -948,7 +948,7 @@ def quick_add_nadeshiko_for_current_card(mw) -> None:
 					audio_field = cand
 					break
 		# Determine sentence field, prefer commonly used names, else fall back
-		sentence_field = str(last_nade.get("sentence_field") or "").strip()
+		sentence_field = str(last_nade.get("sentence_field") or cfg.get("nadeshiko_sentence_field", "")).strip()
 		if not sentence_field:
 			for cand in ["Sentence", "Text", "Front", "Expression", query_field]:
 				if cand in fields:

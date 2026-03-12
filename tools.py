@@ -49,106 +49,106 @@ def _read_config() -> Dict[str, Any]:
         return {}
 
 class BackfillImagesDialog(QDialog):
-	def __init__(self, mw, mode: str, browser=None) -> None:
-		super().__init__(mw)
-		self.mw = mw
-		self.mode = mode  # "deck" or "browser"
-		self.browser = browser
-		self.logger = get_logger()
-		self.cfg = _read_config()
-		self.setWindowTitle("AutoImage")
-		self._build_ui()
+    def __init__(self, mw, mode: str, browser=None) -> None:
+        super().__init__(mw)
+        self.mw = mw
+        self.mode = mode  # "deck" or "browser"
+        self.browser = browser
+        self.logger = get_logger()
+        self.cfg = _read_config()
+        self.setWindowTitle("AutoImage")
+        self._build_ui()
 
     def _add_ui_field(self, label: str, layout: QVBoxLayout) -> Tuple[QHBoxLayout, QLabel, QComboBox]:
         row = QHBoxLayout()
-		lbl = QLabel(label)
-		row.addWidget(lbl)
-		field = QComboBox(self)
-		row.addWidget(field)
-		layout.addLayout(row)
+        lbl = QLabel(label)
+        row.addWidget(lbl)
+        field = QComboBox(self)
+        row.addWidget(field)
+        layout.addLayout(row)
         return row, lbl, field
 
-	def _build_ui(self) -> None:
-		layout = QVBoxLayout(self)
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
 
-		# Deck selector (only for deck mode)
-		if self.mode == "deck":
-			row = QHBoxLayout()
-			row.addWidget(QLabel("Deck"))
-			self.deck_combo = QComboBox(self)
-			# Be compatible with multiple Anki versions
-			try:
-				items = list(self.mw.col.decks.all_names_and_ids())
-			except Exception:
-				items = []
-			for item in items:
-				name = getattr(item, "name", None)
-				if not name and isinstance(item, (list, tuple)) and len(item) >= 1:
-					name = item[0] if isinstance(item[0], str) else None
-				if name:
-					self.deck_combo.addItem(name)
-			row.addWidget(self.deck_combo)
-			layout.addLayout(row)
+        # Deck selector (only for deck mode)
+        if self.mode == "deck":
+            row = QHBoxLayout()
+            row.addWidget(QLabel("Deck"))
+            self.deck_combo = QComboBox(self)
+            # Be compatible with multiple Anki versions
+            try:
+                items = list(self.mw.col.decks.all_names_and_ids())
+            except Exception:
+                items = []
+            for item in items:
+                name = getattr(item, "name", None)
+                if not name and isinstance(item, (list, tuple)) and len(item) >= 1:
+                    name = item[0] if isinstance(item[0], str) else None
+                if name:
+                    self.deck_combo.addItem(name)
+            row.addWidget(self.deck_combo)
+            layout.addLayout(row)
 
-		# Field selectors (dropdowns populated from deck/selection)
-        _, _, self.query_field = self._add_ui_field("Query Field", layout)	
+        # Field selectors (dropdowns populated from deck/selection)
+        _, _, self.query_field = self._add_ui_field("Query Field", layout)    
 
-		# Nadeshiko fields
+        # Nadeshiko fields
         self._row_nade_img, self.lbl_nade_img, self.nade_image_field = self._add_ui_field("Image Field", layout)
         self._row_nade_audio, self.lbl_nade_audio, self.nade_audio_field = self._add_ui_field("Audio Field", layout)
         self._row_nade_sentence, self.lbl_nade_sentence, self.nade_sentence_field = self._add_ui_field("Sentence Field", layout)
         self._row_nade_sentence_translation, self.lbl_nade_sentence_translation, self.nade_sentence_translation_field = self._add_ui_field("Sentence Translation Field", layout)
         self._row_nade_misc, self.lbl_nade_misc, self.nade_misc_field = self._add_ui_field("Misc field", layout)
-	
-		# Buttons
-		row_btn = QHBoxLayout()
-		self.run_btn = QPushButton("Run")
-		self.cancel_btn = QPushButton("Cancel")
-		row_btn.addWidget(self.run_btn)
-		row_btn.addWidget(self.cancel_btn)
-		layout.addLayout(row_btn)	
+    
+        # Buttons
+        row_btn = QHBoxLayout()
+        self.run_btn = QPushButton("Run")
+        self.cancel_btn = QPushButton("Cancel")
+        row_btn.addWidget(self.run_btn)
+        row_btn.addWidget(self.cancel_btn)
+        layout.addLayout(row_btn)    
 
-		qconnect(self.cancel_btn.clicked, self.reject)
-		qconnect(self.run_btn.clicked, lambda: _on_run(self))
-		
+        qconnect(self.cancel_btn.clicked, self.reject)
+        qconnect(self.run_btn.clicked, lambda: _on_run(self))
+        
         # Populate field dropdowns initially and on deck change
-		try:
-			_refresh_field_dropdowns(self)
-		except Exception:
-			pass
+        try:
+            _refresh_field_dropdowns(self)
+        except Exception:
+            pass
 
-		if hasattr(self, "deck_combo"):
-			try:
-				qconnect(self.deck_combo.currentTextChanged, lambda _=None: _refresh_field_dropdowns(self))
-			except Exception:
-				pass
+        if hasattr(self, "deck_combo"):
+            try:
+                qconnect(self.deck_combo.currentTextChanged, lambda _=None: _refresh_field_dropdowns(self))
+            except Exception:
+                pass
 
 
 def _strip_tags(text: str) -> str:
-	try:
-		return re.sub(r"<[^>]+>", "", text or "")
-	except Exception:
-		return text or ""
+    try:
+        return re.sub(r"<[^>]+>", "", text or "")
+    except Exception:
+        return text or ""
 
 
 def _nade_format_sentence(seg: Dict[str, Any], lang_code: str) -> str:
-	"""
+    """
     Return sentence text for the requested language, bolding the highlighted term.
 
-	Uses the API's *_highlight field if available (which wraps matches in <em>),
-	and converts <em>..</em> to <b>..</b>. Falls back to plain content if highlight
-	is missing.
-	"""
-	try:
-		lc = (lang_code or "jp").lower()
-		plain_key = f"content_{'en' if lc=='en' else ('es' if lc=='es' else 'jp')}"
-		hl_key = f"{plain_key}_highlight"
-		hl = str(seg.get(hl_key, "") or "").strip()
-		if hl:
-			return hl.replace("<em>", "<b>").replace("</em>", "</b>")
-		return str(seg.get(plain_key, "") or "").strip()
-	except Exception:
-		return str(seg.get("content_jp", "") or "").strip()
+    Uses the API's *_highlight field if available (which wraps matches in <em>),
+    and converts <em>..</em> to <b>..</b>. Falls back to plain content if highlight
+    is missing.
+    """
+    try:
+        lc = (lang_code or "jp").lower()
+        plain_key = f"content_{'en' if lc=='en' else ('es' if lc=='es' else 'jp')}"
+        hl_key = f"{plain_key}_highlight"
+        hl = str(seg.get(hl_key, "") or "").strip()
+        if hl:
+            return hl.replace("<em>", "<b>").replace("</em>", "</b>")
+        return str(seg.get(plain_key, "") or "").strip()
+    except Exception:
+        return str(seg.get("content_jp", "") or "").strip()
 
 def _nade_format_misc(base: Dict[str, Any], seg: Dict[str, Any]) -> str:
     title_jp = str(base.get("content_jp", "")).strip()
@@ -177,129 +177,129 @@ def _nade_format_misc(base: Dict[str, Any], seg: Dict[str, Any]) -> str:
     return misc
 
 def _nade_origin(base_url: str) -> str:
-	try:
-		p = urlparse(base_url)
-		if p.scheme and p.netloc:
-			return f"{p.scheme}://{p.netloc}"
-	except Exception:
-		pass
-	# Fallback: strip known '/api/...' suffixes
-	base = str(base_url or "").strip()
-	idx = base.find("/api/")
-	return base[:idx] if idx != -1 else base.rstrip("/")
+    try:
+        p = urlparse(base_url)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}"
+    except Exception:
+        pass
+    # Fallback: strip known '/api/...' suffixes
+    base = str(base_url or "").strip()
+    idx = base.find("/api/")
+    return base[:idx] if idx != -1 else base.rstrip("/")
 
 def _nade_normalize_url(url: str, base_url: str) -> str:
-	u = str(url or "").strip()
-	if not u:
-		return u
-	# Replace backslashes with forward slashes (API sometimes returns '\\')
-	u = u.replace("\\", "/")
-	if u.startswith("http://") or u.startswith("https://"):
-		return u
-	origin = _nade_origin(base_url)
-	if u.startswith("/"):
-		return f"{origin}{u}"
-	return f"{origin}/{u}"
+    u = str(url or "").strip()
+    if not u:
+        return u
+    # Replace backslashes with forward slashes (API sometimes returns '\\')
+    u = u.replace("\\", "/")
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+    origin = _nade_origin(base_url)
+    if u.startswith("/"):
+        return f"{origin}{u}"
+    return f"{origin}/{u}"
 
 def _nade_pick_sentences(sentences: List[Dict[str, Any]], term: str, count: int = 1) -> List[Dict[str, Any]]:
-	"""
-	Return the top sentence items with the longest text content.
+    """
+    Return the top sentence items with the longest text content.
 
-	Ignores the search term and prefers items whose Japanese sentence
-	(content_jp or stripped content_jp_highlight) is longest.
-	"""
-	scored = []
+    Ignores the search term and prefers items whose Japanese sentence
+    (content_jp or stripped content_jp_highlight) is longest.
+    """
+    scored = []
 
-	for it in (sentences or []):
-		try:
-			seg = (it or {}).get("segment_info") or {}
-			jp = str(seg.get("content_jp", ""))
-			hl = _strip_tags(str(seg.get("content_jp_highlight", "")))
-			cand = jp if len(jp) >= len(hl) else hl
-			scored.append((len(cand), it))
-		except Exception:
-			continue
+    for it in (sentences or []):
+        try:
+            seg = (it or {}).get("segment_info") or {}
+            jp = str(seg.get("content_jp", ""))
+            hl = _strip_tags(str(seg.get("content_jp_highlight", "")))
+            cand = jp if len(jp) >= len(hl) else hl
+            scored.append((len(cand), it))
+        except Exception:
+            continue
 
-	if not scored:
-		return []
+    if not scored:
+        return []
 
-	# sort by length descending
-	scored.sort(key=lambda x: x[0], reverse=True)
+    # sort by length descending
+    scored.sort(key=lambda x: x[0], reverse=True)
 
-	return [it for _, it in scored[:max(count, 0)]]
+    return [it for _, it in scored[:max(count, 0)]]
 
 
 def _collect_field_names(self, nids: List[int]) -> List[str]:
-	col = self.mw.col
-	seen: Dict[str, None] = {}
-	for nid in (nids or [])[:1000]:
-		try:
-			note = col.get_note(nid)
-			try:
-				for name in list(note.keys()):  # type: ignore[attr-defined]
-					if isinstance(name, str) and name and name not in seen:
-						seen[name] = None
-			except Exception:
-				try:
-					model = note.note_type()  # type: ignore[attr-defined]
-					for fld in (model or {}).get("flds", []):
-						name = fld.get("name")
-						if isinstance(name, str) and name and name not in seen:
-							seen[name] = None
-				except Exception:
-					pass
-		except Exception:
-			continue
-	return list(seen.keys())
+    col = self.mw.col
+    seen: Dict[str, None] = {}
+    for nid in (nids or [])[:1000]:
+        try:
+            note = col.get_note(nid)
+            try:
+                for name in list(note.keys()):  # type: ignore[attr-defined]
+                    if isinstance(name, str) and name and name not in seen:
+                        seen[name] = None
+            except Exception:
+                try:
+                    model = note.note_type()  # type: ignore[attr-defined]
+                    for fld in (model or {}).get("flds", []):
+                        name = fld.get("name")
+                        if isinstance(name, str) and name and name not in seen:
+                            seen[name] = None
+                except Exception:
+                    pass
+        except Exception:
+            continue
+    return list(seen.keys())
 
 def _refresh_field_dropdowns(self) -> None:
-	col = self.mw.col
-	if self.mode == "browser" and self.browser is not None:
-		nids = get_selected_note_ids(self.browser)
-	else:
-		deck_name = self.deck_combo.currentText() if hasattr(self, "deck_combo") else ""
-		nids = get_deck_note_ids(col, deck_name)
+    col = self.mw.col
+    if self.mode == "browser" and self.browser is not None:
+        nids = get_selected_note_ids(self.browser)
+    else:
+        deck_name = self.deck_combo.currentText() if hasattr(self, "deck_combo") else ""
+        nids = get_deck_note_ids(col, deck_name)
 
-	fields = _collect_field_names(self, nids) if nids else []	
+    fields = _collect_field_names(self, nids) if nids else []    
 
-	def _pick_default(candidates: List[str], preferred: List[str]) -> int:
-		for pref in preferred:
-			if pref in candidates:
-				return candidates.index(pref)
-		return 0
+    def _pick_default(candidates: List[str], preferred: List[str]) -> int:
+        for pref in preferred:
+            if pref in candidates:
+                return candidates.index(pref)
+        return 0
 
-	self.query_field.blockSignals(True)
-	self.nade_image_field.blockSignals(True)
-	self.nade_audio_field.blockSignals(True)
-	self.nade_sentence_field.blockSignals(True)
+    self.query_field.blockSignals(True)
+    self.nade_image_field.blockSignals(True)
+    self.nade_audio_field.blockSignals(True)
+    self.nade_sentence_field.blockSignals(True)
     self.nade_sentence_translation_field.blockSignals(True)
     self.nade_misc_field.blockSignals(True)
 
-	self.query_field.clear()
-	self.nade_image_field.clear()
-	self.nade_audio_field.clear()
-	self.nade_sentence_field.clear()
+    self.query_field.clear()
+    self.nade_image_field.clear()
+    self.nade_audio_field.clear()
+    self.nade_sentence_field.clear()
     self.nade_sentence_translation_field.clear()
     self.nade_misc_field.clear()
 
-	self.query_field.addItems(fields)
-	self.nade_image_field.addItems(fields)
-	self.nade_audio_field.addItems(fields)
-	self.nade_sentence_field.addItems(fields)
+    self.query_field.addItems(fields)
+    self.nade_image_field.addItems(fields)
+    self.nade_audio_field.addItems(fields)
+    self.nade_sentence_field.addItems(fields)
     self.nade_sentence_translation_field.addItems(fields)
     self.nade_misc_field.addItems(fields)
 
-	self.query_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("query_field", "word"), "Expression", "Front", "Word", "Term"]))
-	self.nade_image_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("image_field", "picture"), "Picture", "Image", "Images", "Back"]))
-	self.nade_audio_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("audio_field", "sentenceAudio"), "Audio", "Sound", "音声"]))
-	self.nade_sentence_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("sentence_field", "sentence"), "Sentence", "Text", "Front", "Expression"]))
+    self.query_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("query_field", "word"), "Expression", "Front", "Word", "Term"]))
+    self.nade_image_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("image_field", "picture"), "Picture", "Image", "Images", "Back"]))
+    self.nade_audio_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("audio_field", "sentenceAudio"), "Audio", "Sound", "音声"]))
+    self.nade_sentence_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("sentence_field", "sentence"), "Sentence", "Text", "Front", "Expression"]))
     self.nade_sentence_translation_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("sentence_translation_field", "sentenceTranslation"), "SentenceTranslation", "SentenceEng", "Translation"]))
-    self.nade_misc_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("misc_field", "miscInfo"), "Misc", "MiscInfo", "miscellaneous", "Miscellaneous"]))	
+    self.nade_misc_field.setCurrentIndex(_pick_default(fields, [self.cfg.get("misc_field", "miscInfo"), "Misc", "MiscInfo", "miscellaneous", "Miscellaneous"]))    
 
     self.query_field.blockSignals(False)
-	self.nade_image_field.blockSignals(False)
-	self.nade_audio_field.blockSignals(False)
-	self.nade_sentence_field.blockSignals(False)
+    self.nade_image_field.blockSignals(False)
+    self.nade_audio_field.blockSignals(False)
+    self.nade_sentence_field.blockSignals(False)
     self.nade_sentence_translation_field.blockSignals(False)
     self.nade_misc_field.blockSignals(False)
 
@@ -371,47 +371,47 @@ def add_to_note(
     return True
 
 def _on_run(self) -> None:
-	query_field = (self.query_field.currentText().strip() if hasattr(self.query_field, "currentText") else str(self.query_field.text()).strip())
-	per_page = 1
+    query_field = (self.query_field.currentText().strip() if hasattr(self.query_field, "currentText") else str(self.query_field.text()).strip())
+    per_page = 1
 
-	# Validate provider prerequisites up-front to avoid silent no-ops
-	key_check = str(self.cfg.get("nadeshiko_api_key", "")).strip()
-	if not key_check:
-		showWarning("nadeshiko_api_key is missing in config.json")
-		return
+    # Validate provider prerequisites up-front to avoid silent no-ops
+    key_check = str(self.cfg.get("nadeshiko_api_key", "")).strip()
+    if not key_check:
+        showWarning("nadeshiko_api_key is missing in config.json")
+        return
 
-	if not query_field:
-		showWarning("Please specify a Query Field.")
-		return
+    if not query_field:
+        showWarning("Please specify a Query Field.")
+        return
 
-	col = self.mw.col
-	if self.mode == "browser" and self.browser is not None:
-		nids = get_selected_note_ids(self.browser)
-		if not nids:
-			showWarning("No notes selected. Please select notes in the Browser and try again.")
-			return
-	else:
-		deck_name = self.deck_combo.currentText() if hasattr(self, "deck_combo") else ""
-		nids = get_deck_note_ids(col, deck_name)
-		self.logger.info(f"Searching deck: '{deck_name}' -> found {len(nids)} note ids")
+    col = self.mw.col
+    if self.mode == "browser" and self.browser is not None:
+        nids = get_selected_note_ids(self.browser)
+        if not nids:
+            showWarning("No notes selected. Please select notes in the Browser and try again.")
+            return
+    else:
+        deck_name = self.deck_combo.currentText() if hasattr(self, "deck_combo") else ""
+        nids = get_deck_note_ids(col, deck_name)
+        self.logger.info(f"Searching deck: '{deck_name}' -> found {len(nids)} note ids")
 
-	if not nids:
-		showInfo("No notes found to update.")
-		self.accept()
-		return
+    if not nids:
+        showInfo("No notes found to update.")
+        self.accept()
+        return
 
-	updated = 0
-	empty_queries = 0
-	nade_no_result = 0
-	media = self.mw.col.media
-	used_urls: set[str] = set()
+    updated = 0
+    empty_queries = 0
+    nade_no_result = 0
+    media = self.mw.col.media
+    used_urls: set[str] = set()
 
-	for i, nid in enumerate(nids):
-		note = col.get_note(nid)
-		query_text = get_field_value(note, query_field).strip()
-		if not q:
-			empty_queries += 1
-			continue
+    for i, nid in enumerate(nids):
+        note = col.get_note(nid)
+        query_text = get_field_value(note, query_field).strip()
+        if not q:
+            empty_queries += 1
+            continue
 
         try:
             key = str(self.cfg.get("nadeshiko_api_key", "")).strip()
@@ -468,19 +468,19 @@ def _on_run(self) -> None:
         except Exception as e:
             self.logger.error(f"Nadeshiko: {e}")
             continue
-	
-	col.reset()
-	self.mw.reset()
-	self.logger.info(f"Updated {updated} notes for field '{target_field}'")
-	
+    
+    col.reset()
+    self.mw.reset()
+    self.logger.info(f"Updated {updated} notes for field '{target_field}'")
+    
     msg = f"Updated {updated} notes."
-	if nade_no_result:
-		msg += f" No Nadeshiko results for {nade_no_result} note(s)."
-	if empty_queries:
-		msg += f" Empty query field on {empty_queries} note(s)."
+    if nade_no_result:
+        msg += f" No Nadeshiko results for {nade_no_result} note(s)."
+    if empty_queries:
+        msg += f" Empty query field on {empty_queries} note(s)."
     showInfo(msg)
 
-	self.accept()
+    self.accept()
 
 class LoggerProxy:
     def __init__(self):
@@ -490,79 +490,79 @@ class LoggerProxy:
 
 # Reviewer hotkey quick-add support
 def quick_add_nadeshiko_for_current_card(mw) -> None:
-	"""Add an image and audio from Nadeshiko API to current reviewer card.
+    """Add an image and audio from Nadeshiko API to current reviewer card.
 
-	Always overwrites the target image/audio fields. Uses saved query/target/suffix if available.
-	Config keys used:
-	- nadeshiko_api_key
-	- nadeshiko_base_url 
-	- image_field 
-	- audio_field 
-	- sentence_field
+    Always overwrites the target image/audio fields. Uses saved query/target/suffix if available.
+    Config keys used:
+    - nadeshiko_api_key
+    - nadeshiko_base_url 
+    - image_field 
+    - audio_field 
+    - sentence_field
     - sentence_translation_field
     - misc_field
     - *_template (for each field) 
-	"""
-	try:
-		if getattr(mw, "state", "") != "review" or not getattr(getattr(mw, "reviewer", None), "card", None):
-			showWarning("No active card to update.")
-			return
-		col = mw.col
-		card = mw.reviewer.card
-		note = col.get_note(card.nid)
+    """
+    try:
+        if getattr(mw, "state", "") != "review" or not getattr(getattr(mw, "reviewer", None), "card", None):
+            showWarning("No active card to update.")
+            return
+        col = mw.col
+        card = mw.reviewer.card
+        note = col.get_note(card.nid)
 
-		cfg = _read_config()
+        cfg = _read_config()
 
-		def _field_names(n) -> List[str]:
-			try:
-				return list(n.keys())  # type: ignore[attr-defined]
-			except Exception:
-				return []
+        def _field_names(n) -> List[str]:
+            try:
+                return list(n.keys())  # type: ignore[attr-defined]
+            except Exception:
+                return []
         def _pick_field(candidates: List[str], preferred: List[str]) -> int:
-		    for pref in preferred:
-			    if pref in candidates:
-				    return candidates[candidates.index(pref)]
-		    return "" 
+            for pref in preferred:
+                if pref in candidates:
+                    return candidates[candidates.index(pref)]
+            return "" 
 
-		fields = _field_names(note)
-		query_field = _pick_field(fields, [self.cfg.get("query_field", "word"), "Expression", "Front", "Word", "Term"])
+        fields = _field_names(note)
+        query_field = _pick_field(fields, [self.cfg.get("query_field", "word"), "Expression", "Front", "Word", "Term"])
         image_field = _pick_field(fields, [self.cfg.get("image_field", "picture"), "Picture", "Image", "Images", "Back"])
         audio_field = _pick_field(fields, [self.cfg.get("audio_field", "sentenceAudio"), "Audio", "Sound", "音声"])
         sentence_field = _pick_field(fields, [self.cfg.get("sentence_field", "sentence"), "Sentence", "Text", "Front", "Expression"])
         sentence_translation_field = _pick_field(fields, [self.cfg.get("sentence_translation_field", "sentenceTranslation"), "SentenceTranslation", "SentenceEng", "Translation"])
-        misc_field = _pick_field(fields, [self.cfg.get("misc_field", "miscInfo"), "Misc", "MiscInfo", "miscellaneous", "Miscellaneous"])	
+        misc_field = _pick_field(fields, [self.cfg.get("misc_field", "miscInfo"), "Misc", "MiscInfo", "miscellaneous", "Miscellaneous"])    
 
-		if not query_field or not image_field or not audio_field or not sentence_field or not sentence_translation_field or not misc_field:
-			showWarning("Could not determine fields to update.")
-			return
+        if not query_field or not image_field or not audio_field or not sentence_field or not sentence_translation_field or not misc_field:
+            showWarning("Could not determine fields to update.")
+            return
 
-		query_text = get_field_value(note, query_field).strip()
-		if not query_text:
-			showInfo(f"Query field '{query_field}' is empty; nothing to do.")
-			return
+        query_text = get_field_value(note, query_field).strip()
+        if not query_text:
+            showInfo(f"Query field '{query_field}' is empty; nothing to do.")
+            return
 
-		key = str(cfg.get("nadeshiko_api_key", "")).strip()
-		if not key:
-			showWarning("Missing nadeshiko_api_key in config.json")
-			return
-		base_url = str(cfg.get("nadeshiko_base_url", "https://api.brigadasos.xyz/api/v1")).strip() or "https://api.brigadasos.xyz/api/v1"
-		client = NadeshikoApiClient(key, base_url=base_url)
+        key = str(cfg.get("nadeshiko_api_key", "")).strip()
+        if not key:
+            showWarning("Missing nadeshiko_api_key in config.json")
+            return
+        base_url = str(cfg.get("nadeshiko_base_url", "https://api.brigadasos.xyz/api/v1")).strip() or "https://api.brigadasos.xyz/api/v1"
+        client = NadeshikoApiClient(key, base_url=base_url)
 
-		# Ask API for the longest sentence, with a sensible minimum length
-		min_len = int(cfg.get("nadeshiko_min_length", 6))
-		max_len = int(cfg.get("nadeshiko_max_length", 0)) or None
-		data = client.search_sentences(
-			query=query_text,
-			limit=1,
-			content_sort="DESC",
-			min_length=min_len,
-			max_length=max_len,
-		)
-		sentences = (data or {}).get("sentences") or []
-		if not sentences:
-			showInfo("No Nadeshiko results found.")
-			return
-	
+        # Ask API for the longest sentence, with a sensible minimum length
+        min_len = int(cfg.get("nadeshiko_min_length", 6))
+        max_len = int(cfg.get("nadeshiko_max_length", 0)) or None
+        data = client.search_sentences(
+            query=query_text,
+            limit=1,
+            content_sort="DESC",
+            min_length=min_len,
+            max_length=max_len,
+        )
+        sentences = (data or {}).get("sentences") or []
+        if not sentences:
+            showInfo("No Nadeshiko results found.")
+            return
+    
         selection = _nade_pick_sentences(sentences, query_text, cfg.get("count", 1))
         updated = False
 
@@ -582,13 +582,13 @@ def quick_add_nadeshiko_for_current_card(mw) -> None:
                 continue
             updated = True
 
-		if updated:
-			note.flush()
-			col.reset()
-			mw.reset()
-			showInfo("Nadeshiko media (and sentence) added to current card.")
-		else:
-			showInfo("Nothing was updated.")
-	except Exception as e:
-		showWarning(f"Failed to add Nadeshiko media: {e}")
+        if updated:
+            note.flush()
+            col.reset()
+            mw.reset()
+            showInfo("Nadeshiko media (and sentence) added to current card.")
+        else:
+            showInfo("Nothing was updated.")
+    except Exception as e:
+        showWarning(f"Failed to add Nadeshiko media: {e}")
 

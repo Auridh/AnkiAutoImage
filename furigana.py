@@ -7,42 +7,42 @@ tagger = Tagger(f"{unidic_lite.DICDIR}")
 
 kanji_re = re.compile(r"[一-龯]")
 
-def align_furigana(surface, reading):
+def ruby_for_word(surface, reading):
+    """Return surface with furigana in ruby if it contains kanji, otherwise plain."""
+    if not reading:  # no reading available
+        return f"<span>{surface}</span>"
+
     reading = jaconv.kata2hira(reading)
-
-    result = ""
-    i = 0
-
-    for char in surface:
-        if kanji_re.match(char):
-            # find kana until next surface kana
-            kana = ""
-            while i < len(reading):
-                kana += reading[i]
-                i += 1
-                if i >= len(reading) or reading[i] not in surface:
-                    break
-
-            result += f"<ruby>{char}<rt>{kana}</rt></ruby>"
-        else:
-            result += char
-            if i < len(reading):
-                i += 1
-
-    return result
-
+    if kanji_re.search(surface):
+        return f"<ruby>{surface}<rt>{reading}</rt></ruby>"
+    else:
+        return f"<span>{surface}</span>"
 
 def furigana_html(text):
+    """
+    Convert text into HTML with furigana.
+    Highlight spans are preserved and furigana is applied inside them.
+    Other text is split into <span> blocks per token.
+    """
+    # Split input by highlight spans
+    parts = re.split(r'(<span class="highlight">.*?</span>)', text)
     out = []
 
-    for word in tagger(text):
-        surface = word.surface
-        reading = word.feature.kana
-
-        if reading:
-            out.append(align_furigana(surface, reading))
+    for part in parts:
+        if part.startswith('<span class="highlight">'):
+            # Extract inner text
+            inner = re.sub(r'^<span class="highlight">|</span>$', '', part)
+            processed = "".join(
+                ruby_for_word(word.surface, word.feature.kana)
+                for word in tagger(inner)
+            )
+            out.append(f'<span class="highlight">{processed}</span>')
         else:
-            out.append(surface)
+            # Regular text
+            processed = "".join(
+                ruby_for_word(word.surface, word.feature.kana)
+                for word in tagger(part)
+            )
+            out.append(processed)
 
-    html = "".join(out)
-    return f'<span class="group"><span class="term">{html}</span></span>'
+    return "".join(out)

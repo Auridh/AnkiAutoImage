@@ -123,7 +123,7 @@ def add_sentence_to_note(note: Note, field_name: str, value: str, template: Opti
 
 def add_sentence_furigana_to_note(note: Note, field_name: str, value: str, template: Optional[str] = None) -> bool:
     if template is None:
-        template = '##OLD####NEW##'
+        template = '##OLD##<span class="group">##NEW##</span>'
     value = furigana_html(value)
     return add_to_note_field(note, field_name, template, value)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import traceback
 from typing import Any, Dict, List, Tuple
 import re
 from urllib.parse import urlparse
@@ -484,6 +485,7 @@ def _on_run(self) -> None:
             continue
         except Exception as e:
             self.logger.error(f"Nadeshiko: {e}")
+            self.logger.error(traceback.format_exc())
             continue
     
     col.reset()
@@ -612,5 +614,5 @@ def quick_add_nadeshiko_for_current_card(mw) -> None:
         else:
             showInfo("Nothing was updated.")
     except Exception as e:
-        showWarning(f"Failed to add Nadeshiko media: {e}")
+        showWarning(f"Failed to add Nadeshiko media: {e} {traceback.format_exc()}")
 

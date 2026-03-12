@@ -11,11 +11,13 @@
  "image_field": "picture",
  "audio_field": "sentenceAudio",
  "sentence_field": "sentence",
+ "sentence_furigana_field": "sentenceFurigana",
  "sentence_translation_field": "sentenceTranslation",
  "misc_field": "miscInfo",
  "image_template": null,
  "audio_template": null,
  "sentence_template": null,
+ "sentence_furigana_template": null,
  "sentence_translation_template": null,
  "misc_template": null
 }

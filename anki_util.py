@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import re
 import time
+from fugashi import Tagger
 from dataclasses import dataclass
 from typing import List, Optional
 
 from aqt import mw
 from anki.notes import Note
 from anki.collection import Collection
+
+from .furigana import furigana_html
 
 
 @dataclass
@@ -81,14 +84,14 @@ def get_next_note_group(note: Note, field_name: str) -> Optional[int]:
 
     return max(max_number, detection_count) + 1
 
-def add_to_note_field(note: Note, field_name: str, template: str, value: str, group: bool = False) -> bool:
+def add_to_note_field(note: Note, field_name: str, template: str, value: str, group: Optional[int] = None) -> bool:
     if field_name not in note:
         return False
 
-    if not group:
+    if group is None:
         template = template.replace('##GROUP##', '')
     else:
-        template = template.replace('##GROUP##', str(get_next_note_group(note, field_name)))
+        template = template.replace('##GROUP##', str(group))
     
     if not note[field_name]:
         note[field_name] = template.replace('##OLD##', '').replace('##NEW##', value)
@@ -118,15 +121,27 @@ def add_sentence_to_note(note: Note, field_name: str, value: str, template: Opti
         template = '##OLD##<span class="group">##NEW##</span>'
     return add_to_note_field(note, field_name, template, value)
 
-def add_sentence_translation_to_note(note: Note, field_name: str, value: str, template: Optional[str] = None) -> bool:
+def add_sentence_furigana_to_note(note: Note, field_name: str, value: str, template: Optional[str] = None) -> bool:
     if template is None:
-        template = '##OLD##<span class="group##GROUP##">##NEW##</span>'
-    return add_to_note_field(note, field_name, template, value, True)
+        template = '##OLD####NEW##'
+    value = furigana_html(value)
+    return add_to_note_field(note, field_name, template, value)
 
-def add_misc_to_note(note: Note, field_name: str, value: str, template: Optional[str] = None) -> bool:
+def add_sentence_translation_to_note(note: Note, field_name: str, value: str, template: Optional[str] = None, group_field: Optional[str] = None) -> bool:
     if template is None:
         template = '##OLD##<span class="group##GROUP##">##NEW##</span>'
-    return add_to_note_field(note, field_name, template, value, True)
+    if group_field is not None:
+        return add_to_note_field(note, field_name, template, value, get_next_note_group(note, group_field))
+
+    return add_to_note_field(note, field_name, template, value)
+
+def add_misc_to_note(note: Note, field_name: str, value: str, template: Optional[str] = None, group_field: Optional[str] = None) -> bool:
+    if template is None:
+        template = '##OLD##<span class="group##GROUP##">##NEW##</span>'
+    if group_field is not None:
+        return add_to_note_field(note, field_name, template, value, get_next_note_group(note, group_field))
+
+    return add_to_note_field(note, field_name, template, value)
 
 def get_field_value(note: Note, field_name: str) -> str:
     try:

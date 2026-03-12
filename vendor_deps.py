@@ -44,7 +44,7 @@ def main() -> None:
     ]
     print("Running:", " ".join(cmd))
     subprocess.check_call(cmd)
-    print("Vendored deps installed into:", vendor_dir)
+    print("Vendored deps installed into:", vendor_dir) 
 
 
 if __name__ == "__main__":

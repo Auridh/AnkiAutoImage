@@ -2,19 +2,18 @@ from __future__ import annotations
 
 import os
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 import re
-from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QPushButton, QCheckBox, QSpinBox
+from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton 
 from aqt.qt import qconnect
 from aqt import mw
-from aqt.utils import showInfo, showWarning, showError
+from aqt.utils import showInfo, showWarning, showCritical
 
 from .logger import get_logger
 from .anki_util import get_selected_note_ids, get_deck_note_ids, ensure_media_filename_safe, get_field_value, add_audio_to_note, add_image_to_note, add_sentence_to_note, add_sentence_translation_to_note, add_misc_to_note
-from .nadeshiko_api import NadeshikoApiClient, NadeshikoApiError
+from .nadeshiko_api import NadeshikoApiClient
 
 
 def _addon_package_name() -> str:
@@ -201,7 +200,7 @@ def _nade_normalize_url(url: str, base_url: str) -> str:
         return f"{origin}{u}"
     return f"{origin}/{u}"
 
-def _nade_pick_sentences(sentences: List[Dict[str, Any]], term: str, count: int = 1) -> List[Dict[str, Any]]:
+def _nade_pick_sentences(sentences: List[Dict[str, Any]], count: int = 1) -> List[Dict[str, Any]]:
     """
     Return the top sentence items with the longest text content.
 
@@ -306,9 +305,12 @@ def _refresh_field_dropdowns(self) -> None:
 def add_to_note(
     cfg,
     logger,
+    client,
+    media,
     note,
-    query_text,
-    base_url,
+    query_text: str,
+    base_url: str,
+    nid: int,
     img_field: str,
     aud_field: str,
     sent_field: str,
@@ -349,7 +351,7 @@ def add_to_note(
             img_bytes = client.download(img_url)
             tail = img_url.split("/")[-1].split("?")[0] or f"nade_{nid}.jpg"
             media_name_img = media.write_data(ensure_media_filename_safe(tail), img_bytes)
-            if not add_image_to_note(note, img_field, media_name_img, replace=replace):
+            if not add_image_to_note(note, img_field, media_name_img, cfg.get("image_template", None)):
                 logger.error(f"Nadeshiko adding image failed for '{query_text}'.")
                 return False
         except Exception as e:
@@ -361,7 +363,7 @@ def add_to_note(
             aud_bytes = client.download(audio_url)
             tail = audio_url.split("/")[-1].split("?")[0] or f"nade_{nid}.mp3"
             media_name_aud = media.write_data(ensure_media_filename_safe(tail), aud_bytes)
-            if not add_audio_to_note(note, aud_field, media_name_aud, replace=replace):
+            if not add_audio_to_note(note, aud_field, media_name_aud, cfg.get("audio_template", None)):
                 logger.error(f"Nadeshiko adding audio failed for '{query_text}'.")
                 return False
         except Exception as e:
@@ -372,7 +374,6 @@ def add_to_note(
 
 def _on_run(self) -> None:
     query_field = (self.query_field.currentText().strip() if hasattr(self.query_field, "currentText") else str(self.query_field.text()).strip())
-    per_page = 1
 
     # Validate provider prerequisites up-front to avoid silent no-ops
     key_check = str(self.cfg.get("nadeshiko_api_key", "")).strip()
@@ -403,13 +404,11 @@ def _on_run(self) -> None:
     updated = 0
     empty_queries = 0
     nade_no_result = 0
-    media = self.mw.col.media
-    used_urls: set[str] = set()
 
-    for i, nid in enumerate(nids):
+    for nid in nids:
         note = col.get_note(nid)
         query_text = get_field_value(note, query_field).strip()
-        if not q:
+        if not query_text:
             empty_queries += 1
             continue
 
@@ -442,14 +441,17 @@ def _on_run(self) -> None:
             trans_field = self.nade_sentence_translation_field.currentText().strip()    
             misc_field = self.nade_misc_field.currentText().strip()
 
-            selection = _nade_pick_sentences(sentences, query_text, self.cfg.get("count", 1))
+            selection = _nade_pick_sentences(sentences, self.cfg.get("count", 1))
             selection_success = False
             for sentence in selection:
                 success = add_to_note(self.cfg,
                                       self.logger,
+                                      client,
+                                      self.mw.col.media,
                                       note,
                                       query_text,
                                       base_url,
+                                      nid,
                                       img_field,
                                       aud_field,
                                       sent_field,
@@ -471,7 +473,6 @@ def _on_run(self) -> None:
     
     col.reset()
     self.mw.reset()
-    self.logger.info(f"Updated {updated} notes for field '{target_field}'")
     
     msg = f"Updated {updated} notes."
     if nade_no_result:
@@ -486,7 +487,7 @@ class LoggerProxy:
     def __init__(self):
         self.info = showInfo
         self.warning = showWarning
-        self.error = showError
+        self.error = showCritical
 
 # Reviewer hotkey quick-add support
 def quick_add_nadeshiko_for_current_card(mw) -> None:
@@ -518,19 +519,19 @@ def quick_add_nadeshiko_for_current_card(mw) -> None:
                 return list(n.keys())  # type: ignore[attr-defined]
             except Exception:
                 return []
-        def _pick_field(candidates: List[str], preferred: List[str]) -> int:
+        def _pick_field(candidates: List[str], preferred: List[str]) -> str:
             for pref in preferred:
                 if pref in candidates:
                     return candidates[candidates.index(pref)]
             return "" 
 
         fields = _field_names(note)
-        query_field = _pick_field(fields, [self.cfg.get("query_field", "word"), "Expression", "Front", "Word", "Term"])
-        image_field = _pick_field(fields, [self.cfg.get("image_field", "picture"), "Picture", "Image", "Images", "Back"])
-        audio_field = _pick_field(fields, [self.cfg.get("audio_field", "sentenceAudio"), "Audio", "Sound", "音声"])
-        sentence_field = _pick_field(fields, [self.cfg.get("sentence_field", "sentence"), "Sentence", "Text", "Front", "Expression"])
-        sentence_translation_field = _pick_field(fields, [self.cfg.get("sentence_translation_field", "sentenceTranslation"), "SentenceTranslation", "SentenceEng", "Translation"])
-        misc_field = _pick_field(fields, [self.cfg.get("misc_field", "miscInfo"), "Misc", "MiscInfo", "miscellaneous", "Miscellaneous"])    
+        query_field = _pick_field(fields, [cfg.get("query_field", "word"), "Expression", "Front", "Word", "Term"])
+        image_field = _pick_field(fields, [cfg.get("image_field", "picture"), "Picture", "Image", "Images", "Back"])
+        audio_field = _pick_field(fields, [cfg.get("audio_field", "sentenceAudio"), "Audio", "Sound", "音声"])
+        sentence_field = _pick_field(fields, [cfg.get("sentence_field", "sentence"), "Sentence", "Text", "Front", "Expression"])
+        sentence_translation_field = _pick_field(fields, [cfg.get("sentence_translation_field", "sentenceTranslation"), "SentenceTranslation", "SentenceEng", "Translation"])
+        misc_field = _pick_field(fields, [cfg.get("misc_field", "miscInfo"), "Misc", "MiscInfo", "miscellaneous", "Miscellaneous"])    
 
         if not query_field or not image_field or not audio_field or not sentence_field or not sentence_translation_field or not misc_field:
             showWarning("Could not determine fields to update.")
@@ -563,15 +564,18 @@ def quick_add_nadeshiko_for_current_card(mw) -> None:
             showInfo("No Nadeshiko results found.")
             return
     
-        selection = _nade_pick_sentences(sentences, query_text, cfg.get("count", 1))
+        selection = _nade_pick_sentences(sentences, cfg.get("count", 1))
         updated = False
 
         for item in selection:
             success = add_to_note(cfg,
                                   LoggerProxy(),
+                                  client,
+                                  col.media,
                                   note,
                                   query_text,
                                   base_url,
+                                  card.nid,
                                   image_field,
                                   audio_field,
                                   sentence_field,

@@ -95,15 +95,15 @@ def init_addon() -> None:
     if not _setup_browser_menu_with_gui_hooks():
         _setup_browser_menu_with_legacy_hook()
 
-    # logging dir
-    os.makedirs(os.path.join(os.path.dirname(__file__), 'logs'), exist_ok=True)
-
     # Reviewer hotkey (configurable via config.json -> reviewer_hotkey)
     try:
         import json, os
         base_dir = os.path.dirname(__file__)
         cfg_path = os.path.join(base_dir, "config.json")
         hotkey = "Ctrl+Shift+G"
+
+		# logging dir
+        os.makedirs(os.path.join(base_dir, 'logs'), exist_ok=True)
         
         try:
             # Prefer Anki-managed config from meta.json
@@ -134,8 +134,8 @@ def init_addon() -> None:
         # Keep references to prevent garbage collection
         try:
             if not hasattr(mw, "_autoimage_shortcuts"):
-                mw._autoimage_shortcuts = []
-            mw._autoimage_shortcuts.extend([sc, sc2, sc3])
+                mw._autoimage_shortcuts = [] # pyright: ignore
+            mw._autoimage_shortcuts.extend([sc]) # pyright: ignore
         except Exception:
             pass
     except Exception:

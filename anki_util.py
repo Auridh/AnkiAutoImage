@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
+from typing import List, Optional
 
 from aqt import mw
 from anki.notes import Note
@@ -42,7 +41,7 @@ def get_selected_note_ids(browser) -> List[int]:
         col = mw.col  # type: ignore
         for cid in cids:
             try:
-                card = col.get_card(cid)
+                card = col.get_card(cid)  # type: ignore
                 nids.append(card.nid)
             except Exception:
                 continue
@@ -98,7 +97,7 @@ def add_to_note_field(note: Note, field_name: str, template: str, value: str, gr
 
     return True
 
-def add_image_to_note(note: Note, field_name: str, media_filename: str, tempalte: Optional[str] = None) -> bool:
+def add_image_to_note(note: Note, field_name: str, media_filename: str, template: Optional[str] = None) -> bool:
     img_tag = f"<img src=\"{media_filename}\">"
 
     if template is None:

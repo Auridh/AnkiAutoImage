@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 """
-Anki add-on: Auto Images (Google)
+Anki add-on: Auto Images
 
 Adds two entry points:
-- Tools -> Auto Images (Google) (run over a deck)
-- Browser -> Edit -> Auto Images (Google) (run over selected notes)
+- Tools -> Auto Images
+- Browser -> Edit -> Auto Images
 
 Configuration is read from config.json next to this file.
 """
 
-# Ensure vendored dependencies (e.g., google-genai and its deps) are importable
+# Ensure vendored dependencies are importable
 try:
 	import os, sys
 	_base_dir = os.path.dirname(__file__)
@@ -37,7 +37,7 @@ def _open_browser_dialog(browser) -> None:
 
 
 def _setup_tools_menu() -> None:
-	action = QAction("Auto Images (Google)", mw)
+	action = QAction("Auto Images", mw)
 	qconnect(action.triggered, _open_tools_dialog)
 	mw.form.menuTools.addAction(action)
 
@@ -47,12 +47,12 @@ def _setup_browser_menu_with_gui_hooks() -> bool:
 		from aqt import gui_hooks
 
 		def on_browser_menus_init(browser):
-			action = QAction("Auto Images (Google)", browser)
+			action = QAction("Auto Images", browser)
 			qconnect(action.triggered, lambda: _open_browser_dialog(browser))
 			browser.form.menuEdit.addAction(action)
 
 		def on_browser_context_menu(browser, menu):
-			action = QAction("Auto Images (Google)", browser)
+			action = QAction("Auto Images", browser)
 			qconnect(action.triggered, lambda: _open_browser_dialog(browser))
 			menu.addSeparator()
 			menu.addAction(action)
@@ -73,7 +73,7 @@ def _setup_browser_menu_with_legacy_hook() -> None:
 		from anki.hooks import addHook
 
 		def on_browser_setup_menus(browser):
-			action = QAction("Auto Images (Google)", browser)
+			action = QAction("Auto Images", browser)
 			qconnect(action.triggered, lambda: _open_browser_dialog(browser))
 			browser.form.menuEdit.addAction(action)
 			# Context menu on older Anki (fallback)
@@ -90,29 +90,21 @@ def _setup_browser_menu_with_legacy_hook() -> None:
 		pass
 
 
-def _ensure_user_files_dir() -> None:
-	import os
-	base_dir = os.path.dirname(__file__)
-	user_files_dir = os.path.join(base_dir, "user_files")
-	try:
-		os.makedirs(user_files_dir, exist_ok=True)
-	except Exception:
-		pass
-
-
 def init_addon() -> None:
-	_ensure_user_files_dir()
 	_setup_tools_menu()
 	if not _setup_browser_menu_with_gui_hooks():
 		_setup_browser_menu_with_legacy_hook()
+
+    # logging dir
+    os.makedirs(os.path.join(os.path.dirname(__file__), 'logs'), exist_ok=True)
+
 	# Reviewer hotkey (configurable via config.json -> reviewer_hotkey)
 	try:
 		import json, os
 		base_dir = os.path.dirname(__file__)
 		cfg_path = os.path.join(base_dir, "config.json")
 		hotkey = "Ctrl+Shift+G"
-		hotkey2 = "Ctrl+Shift+Y"
-		hotkey3 = "Ctrl+Shift+U"
+		
 		try:
 			# Prefer Anki-managed config from meta.json
 			try:
@@ -120,33 +112,25 @@ def init_addon() -> None:
 				cfg = mw.addonManager.getConfig(pkg) or {}
 			except Exception:
 				cfg = {}
+
 			# Fallback to bundled config.json
 			if not cfg:
 				with open(cfg_path, "r", encoding="utf-8") as f:
 					cfg = json.load(f)
 				hotkey = str(cfg.get("reviewer_hotkey", hotkey)) or hotkey
-				hotkey2 = str(cfg.get("reviewer_hotkey_nadeshiko", hotkey2)) or hotkey2
-				hotkey3 = str(cfg.get("reviewer_hotkey_genai", hotkey3)) or hotkey3
 		except Exception:
 			pass
+
 		sc = QShortcut(QKeySequence(hotkey), mw)
-		from .tools import quick_add_image_for_current_card
-		qconnect(sc.activated, lambda: quick_add_image_for_current_card(mw))
-		# Second hotkey for Nadeshiko image+audio
-		sc2 = QShortcut(QKeySequence(hotkey2), mw)
 		from .tools import quick_add_nadeshiko_for_current_card
-		qconnect(sc2.activated, lambda: quick_add_nadeshiko_for_current_card(mw))
-		# Third hotkey for Google GenAI image generation
-		sc3 = QShortcut(QKeySequence(hotkey3), mw)
-		from .tools import quick_add_google_genai_image_for_current_card
-		qconnect(sc3.activated, lambda: quick_add_google_genai_image_for_current_card(mw))
+		qconnect(sc.activated, lambda: quick_add_nadeshiko_for_current_card(mw))	
+		
 		# Ensure shortcuts are global within the app window
 		try:
 			sc.setContext(Qt.ShortcutContext.ApplicationShortcut)
-			sc2.setContext(Qt.ShortcutContext.ApplicationShortcut)
-			sc3.setContext(Qt.ShortcutContext.ApplicationShortcut)
-		except Exception:
+        except Exception:
 			pass
+
 		# Keep references to prevent garbage collection
 		try:
 			if not hasattr(mw, "_autoimage_shortcuts"):
